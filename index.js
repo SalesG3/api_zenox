@@ -18,7 +18,4 @@ require('./routes/autocomplete/change')
 require('./routes/others/files')
 require('./routes/others/entidades')
 require('./routes/others/dashboard')
-
-// RELATÓRIOS
-require('./routes/reports/listagem')
-require('./routes/reports/documentos')
+require('./routes/others/reports')

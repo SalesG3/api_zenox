@@ -1,46 +1,7 @@
-const { app, con, jwt, map } = require('../../server')
+const { app, con, jwt, map } = require("../../server")
+const { pdfmake, fonts, maskCpfCnpj, maskCurrency, maskCep, maskCell } = require('./reports.config')
 
-const pdfmake = require('pdfmake')
-
-// Dando acesso a gerar relatórios
-pdfmake.setUrlAccessPolicy(() => true)
-pdfmake.setLocalAccessPolicy(() => true)
-
-// Setando as fontes do relatório
-const fonts = {
-    Helvetica: {
-        normal: 'Helvetica',
-        bold: 'Helvetica-Bold',
-        italics: 'Helvetica-Oblique',
-        bolditalics: 'Helvetica-BoldOblique'
-    }
-}
-
-function maskCpfCnpj(valor) {
-    // Remove todos os caracteres não numéricos
-    const valorLimpo = valor.replace(/\D/g, '');
-
-    if (valorLimpo.length <= 11) {
-        // Máscara CPF: 000.000.000-00
-        return valorLimpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-    } else {
-        // Máscara CNPJ: 00.000.000/0000-00
-        return valorLimpo.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
-    }
-}
-
-function maskCurrency(valor) {
-    // Garante que o valor é um número válido, se não for, retorna zero
-    const numero = Number(valor) || 0; 
-    
-    return new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: 'BRL'
-    }).format(numero);
-}
-
-app.post('/reports/documento/:table', async(req, res) => {
-
+async function ordemservico(req){
     let filters = req.body
 
     let ID_ENTIDADE = jwt.verify(req.headers.x_session, process.env.XKEY).ID_ENTIDADE
@@ -50,6 +11,16 @@ app.post('/reports/documento/:table', async(req, res) => {
         SELECT
 	        P.NM_PESSOA,
             P.CADASTRO,
+            CONCAT(
+                P.END_LOGRADOURO, ', ' ,
+                P.END_NUMERO, ', ' ,
+                P.END_BAIRRO, ' - ' ,
+                CI.NM_CIDADE
+            ) AS END_ENDERECO,
+            P.END_CEP,
+            P.CON_CELULAR,
+            P.CON_TELEFONE,
+            P.CON_EMAIL,
             M.*,
             SUM(IF(TP_PRODUTO = 'S', VL_TOTAL, 0)) AS VL_SERVICO,
             SUM(IF(TP_PRODUTO IN ('P','R'), VL_TOTAL, 0)) AS VL_PRODUTO
@@ -57,6 +28,7 @@ app.post('/reports/documento/:table', async(req, res) => {
 	        INNER JOIN PESSOAS P ON M.ID_PESSOA = P.ID_PESSOA
             INNER JOIN MOVIMENTACOES_ITENS MI ON M.ID_MOVIMENTACAO = MI.ID_MOVIMENTACAO
             INNER JOIN PRODUTOS PR ON MI.ID_PRODUTO = PR.ID_PRODUTO
+            LEFT  JOIN CIDADES CI ON CI.ID_CIDADE = P.ID_CIDADE
         WHERE M.ID_MOVIMENTACAO = ${filters.ID_MOVIMENTACAO}
         GROUP BY 1, 2, 3`))[0]
 
@@ -95,7 +67,7 @@ app.post('/reports/documento/:table', async(req, res) => {
                         { text: entidade.DS_ENTIDADE, fontSize: 14, bold: true, margin: [20, 15, 20, 0] },
                         { text: "CNPJ: " + maskCpfCnpj(entidade.CNPJ), fontSize: 9, color: '#444', margin: [20, 5, 20, 0] },
                         { text: entidade.DS_ENDERECO, fontSize: 9, color: '#444', margin: [20, 5, 20, 0] },
-                        { text: "Ordem de Serviço - Nº 999", fontSize: 14, bold: true, margin: [20, 10, 20, 5], color: 'red'}
+                        { text: "Ordem de Serviço - Nº " + OS.CD_MOVIMENTACAO, fontSize: 14, bold: true, margin: [20, 10, 20, 5], color: 'red'}
                         
                     ],
                     alignment: 'right'
@@ -112,6 +84,21 @@ app.post('/reports/documento/:table', async(req, res) => {
                     { text: "CPF/CNPJ: " + maskCpfCnpj(OS.CADASTRO), fontSize: 10, width: '33%' },
                 ],
                 margin: [0, 10, 0, 0]
+            },
+            {
+                columns: [
+                    { text: "Endereço: " + OS.END_ENDERECO, fontSize: 10, width: '66%' },
+                    { text: "CEP: " + maskCep(OS.END_CEP), fontSize: 10, width: '33%' }
+                ],
+                margin: [0, 7, 0, 0]
+            },
+            {
+                columns: [
+                    { text: "Email: " + (OS.CON_EMAIL || " - "), fontSize: 10, width: '50%' },
+                    { text: "Celular: " + maskCell(OS.CON_CELULAR), fontSize: 10, width: '25%' },
+                    { text: "Telefone: " + maskCell(OS.CON_TELEFONE), fontSize: 10, width: '25%' }
+                ],
+                margin: [0, 7, 0, 0]
             },
 
             { text: "Itens da Ordem de Serviço:", fontSize: 12, bold: true, margin: [0, 20, 0, 0] },
@@ -235,15 +222,14 @@ app.post('/reports/documento/:table', async(req, res) => {
                         margin: [0, 30, 10, 0]
                     }
                 ]
-
         }}
-
     })
-    
+
     let data = 'data:application/pdf;base64,' + await maker.getBase64()
 
-    res.send({
-        success: true,
-        file: data
-    })
-})
+    return data
+}
+
+module.exports = {
+    ordemservico
+}
