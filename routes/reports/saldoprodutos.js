@@ -1,0 +1,65 @@
+const { con, jwt } = require('../../server')
+const { pdfmake, fonts, maskCpfCnpj, maskCurrency, maskCep, maskCell } = require('./reports.config')
+
+async function saldoprodutos(req){
+    let filters = req.body
+
+    let ID_ENTIDADE = jwt.verify(req.headers.x_session, process.env.XKEY).ID_ENTIDADE
+    let [entidade] = (await con.promise().query('SELECT * FROM REPORT_ENTIDADE WHERE ID_ENTIDADE = ?', ID_ENTIDADE))[0]
+
+    let maker = pdfmake.createPdf({
+        defaultStyle: { font: "Helvetica"},
+        pageSize: 'A4',
+        pageMargins: [ 20, 100, 20, 20 ],
+        
+        header: function( ){ return{
+            margin: [10, 10, 10, 10],
+            columns: [
+                {
+                    image: entidade.ANEXO,
+                    width: 80
+                },
+                {
+                    stack: [
+                        { text: entidade.DS_ENTIDADE, fontSize: 14, bold: true, margin: [20, 15, 20, 0] },
+                        { text: "CNPJ: " + maskCpfCnpj(entidade.CNPJ), fontSize: 9, color: '#444', margin: [20, 5, 20, 0] },
+                        { text: entidade.DS_ENDERECO, fontSize: 9, color: '#444', margin: [20, 5, 20, 0] },
+                        { text: "Listagem de Credores & Responsáveis", fontSize: 14, bold: true, margin: [20, 10, 20, 5], color: 'red'}
+                        
+                    ],
+                    alignment: 'right'
+                },
+                
+            ]
+        }},
+        content: [
+                    {
+                        columns: [
+                            { text: "Código", fontSize: 10, width:'10%', bold:true },
+                            { text: "Tipo", fontSize: 10, width: '20%', bold:true  },
+                            { text: "Nome", fontSize: 10, width: '40%', bold:true  },
+                            { text: "CPF/CNPJ", fontSize: 10, width: '20%', bold:true  },
+                            { text: "Ativo", fontSize: 10, width: '10%', bold:true  }
+                        ],
+                        margin: [0, 7, 0, 0]
+                    },
+                    {canvas: [{type: 'line', x1: 0, y1: 0, x2: 555, y2: 0, lineWidth: 1, lineColor: '#cccccc' }], margin: [0, 2, 0, 5]},
+                    ...data.map(i => { return[{
+                        columns: [
+                            { text: i.CD_PESSOA, fontSize: 9, width:'10%' },
+                            { text: i.TP_PESSOA == 'F' ? "Física" : "Jurídica", fontSize: 9, width: '20%' },
+                            { text: i.NM_PESSOA, fontSize: 9, width: '40%' },
+                            { text: maskCpfCnpj(i.CADASTRO), fontSize: 9, width: '20%' },
+                            { text: i.SN_ATIVO ? "Sim" : "Não", fontSize: 9, width: '10%' },
+                        ],
+                        margin: [0, 2, 0, 3]
+                    }, {canvas: [{type: 'line', x1: 0, y1: 0, x2: 555, y2: 0, lineWidth: 1, lineColor: '#cccccc' }], margin: [0, 2, 0, 2]},
+                ]})
+        ]
+    })
+    
+}
+
+module.exports = {
+    saldoprodutos: saldoprodutos
+}

@@ -33,6 +33,7 @@ function maskCurrency(valor) {
 }
 
 function maskCep(valor) {
+    if(!valor) return " - "
     const valorLimpo = valor.replace(/\D/g, '').substring(0, 8);
 
     return valorLimpo
